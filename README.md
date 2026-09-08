@@ -1,5 +1,7 @@
 # YT Clip
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-support%20this%20project-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/beausterling)
+
 A tiny Chrome extension that adds a "Download / Clip" button under any YouTube video.
 Download the full audio (mp3) or video (mp4), or clip a section between two timestamps.
 Files land in your Downloads folder and pop open in Finder when done.
@@ -81,6 +83,12 @@ systemd user unit (or any supervisor), and load the extension the same way. Repl
 
 YouTube changes often. If downloads start failing at every step, `brew upgrade yt-dlp` fixes it
 nine times out of ten.
+
+## Support
+
+YT Clip is free and open source. If it saves you time, you can
+[buy me a coffee](https://buymeacoffee.com/beausterling). It keeps the yt-dlp fixes coming
+every time YouTube changes something.
 
 ## License
 
