@@ -68,18 +68,21 @@ function findCached(id, kind) {
 }
 
 // The ladder from audio-extract/extract.sh, cheapest first. Cookies unlock YouTube's JS challenge.
+// Each rung has a human label and a "what is happening while nothing moves" note for the UI.
 function ladder(kind) {
   const ck = ['--cookies-from-browser', COOKIE_BROWSER, '--extractor-args', 'youtube:player_client=web'];
+  const browser = COOKIE_BROWSER[0].toUpperCase() + COOKIE_BROWSER.slice(1);
   if (kind === 'audio') return [
-    ['-f', 'bestaudio'],
-    ['-f', 'bestaudio', '--extractor-args', 'youtube:player_client=web_safari,tv'],
-    ['-f', 'bestaudio', ...ck],
-    ['-f', 'best', ...ck],
+    { label: 'direct audio stream', note: 'asking YouTube for the plain audio track', args: ['-f', 'bestaudio'] },
+    { label: 'Safari/TV player fallback', note: 'retrying through the Safari and TV player clients', args: ['-f', 'bestaudio', '--extractor-args', 'youtube:player_client=web_safari,tv'] },
+    { label: `${browser} cookies`, note: `signing in with your ${browser} cookies and solving YouTube's JS challenge (this can take a while)`, args: ['-f', 'bestaudio', ...ck] },
+    { label: 'combined stream, last resort', note: 'pulling the combined audio+video file and stripping the video afterwards', args: ['-f', 'best', ...ck] },
   ];
+  const fmt = ['-f', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b', '--merge-output-format', 'mp4'];
   return [
-    ['-f', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b', '--merge-output-format', 'mp4'],
-    ['-f', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b', '--merge-output-format', 'mp4', ...ck],
-    ['-f', 'best', '--merge-output-format', 'mp4', ...ck],
+    { label: 'direct video stream', note: 'asking YouTube for the best video and audio tracks', args: fmt },
+    { label: `${browser} cookies`, note: `signing in with your ${browser} cookies and solving YouTube's JS challenge (this can take a while)`, args: [...fmt, ...ck] },
+    { label: 'combined stream, last resort', note: 'pulling the single combined file YouTube still serves', args: ['-f', 'best', '--merge-output-format', 'mp4', ...ck] },
   ];
 }
 
@@ -94,15 +97,16 @@ async function fetchSource(job, url, id, kind) {
   const order = [preferred[kind], ...rungs.map((_, i) => i).filter(i => i !== preferred[kind])];
   let n = 0;
   for (const i of order) {
-    const args = rungs[i];
+    const { label, note, args } = rungs[i];
     n++;
     job.phase = 'downloading'; job.phaseStart = Date.now();
-    job.step = `strategy ${n} of ${rungs.length}${args.includes('--cookies-from-browser') ? ' (with cookies)' : ''}`;
+    job.step = `Step ${n} of ${rungs.length}: ${label}`;
+    job.note = note;
     job.progress = 0; job.eta = null; job.speed = null; job.size = null;
     const r = await run('yt-dlp', ['--no-playlist', '--newline', ...args, '-o', join(CACHE, prefix + '.%(ext)s'), url], job);
     const got = findCached(id, kind);
     if (r.code === 0 && got) { preferred[kind] = i; return got; }
-    job.log.push(`strategy failed: yt-dlp ${args.join(' ')}\n${r.err.slice(-400)}`);
+    job.log.push(`step ${n} failed: yt-dlp ${args.join(' ')}\n${r.err.slice(-400)}`);
     for (const f of readdirSync(CACHE)) if (f.startsWith(prefix) && (f.endsWith('.part') || f.endsWith('.ytdl'))) rmSync(join(CACHE, f), { force: true });
   }
   throw new Error('all yt-dlp strategies failed. Try: yt-dlp --list-formats <url>');
@@ -116,6 +120,9 @@ async function runJob(job, { url, kind, start, end }) {
     if (info.code !== 0) throw new Error('yt-dlp could not read this URL: ' + info.err.slice(-300));
     const [id, title, durStr] = info.out.trim().split('\n');
     const srcDur = Number(durStr) || 0;
+    const clipReq = start != null && end != null;
+    if (clipReq && srcDur > 15 * 60) job.hint = `Heads up: this video is ${Math.round(srcDur / 60)} min long. YouTube refuses partial downloads, so the whole file comes down first. Long videos take longer even when you only clip a small portion.`;
+    else if (srcDur > 30 * 60) job.hint = `Heads up: this video is ${Math.round(srcDur / 60)} min long, so this will take a bit.`;
     const src = await fetchSource(job, url, id, kind);
     const clip = start != null && end != null;
     const base = safe(title || id) + (clip ? ` [${stamp(toSec(start))}-${stamp(toSec(end))}]` : '');
@@ -123,7 +130,7 @@ async function runJob(job, { url, kind, start, end }) {
     let out = join(OUT_DIR, `${base}.${ext}`), n = 1;
     while (existsSync(out)) out = join(OUT_DIR, `${base} (${n++}).${ext}`);
 
-    job.phase = 'encoding'; job.phaseStart = Date.now(); job.progress = 0; job.eta = null; job.speed = null;
+    job.phase = 'encoding'; job.phaseStart = Date.now(); job.progress = 0; job.eta = null; job.speed = null; job.note = null;
     job.step = clip ? 'trimming clip' : (kind === 'audio' ? 'converting to mp3' : 'finalizing mp4');
     const expect = clip ? toSec(end) - toSec(start) : srcDur;
     // -ss before -i = fast seek; re-encode gives an exact, keyframe-independent cut.
@@ -172,7 +179,7 @@ http.createServer((req, res) => {
       if ((b.start != null) !== (b.end != null)) return json(res, 400, { error: 'start and end go together' });
       if (b.start != null && !(toSec(b.end) > toSec(b.start))) return json(res, 400, { error: 'end must be after start' });
       const id = randomUUID();
-      const job = { id, status: 'running', phase: 'info', step: 'queued', progress: 0, eta: null, speed: null, size: null, phaseStart: Date.now(), updatedAt: Date.now(), log: [], file: null, error: null };
+      const job = { id, status: 'running', phase: 'info', step: 'queued', note: null, hint: null, progress: 0, eta: null, speed: null, size: null, phaseStart: Date.now(), updatedAt: Date.now(), log: [], file: null, error: null };
       jobs.set(id, job);
       runJob(job, b);
       json(res, 202, { id });

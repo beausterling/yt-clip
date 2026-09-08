@@ -2,27 +2,76 @@
 
 A tiny Chrome extension that adds a "Download / Clip" button under any YouTube video.
 Download the full audio (mp3) or video (mp4), or clip a section between two timestamps.
+Files land in your Downloads folder and pop open in Finder when done.
 
 Chrome extensions cannot run yt-dlp, so there are two parts:
 
-- `server/` — a zero-dependency Node server on `127.0.0.1:48923` that wraps the yt-dlp
-  fallback ladder from the `audio-extract` skill and trims with ffmpeg. Files land in `~/Downloads`
-  and are revealed in Finder when done.
-- `extension/` — Manifest V3 extension. Content script injects the button; the background
+- `server/` - a zero-dependency Node server on `127.0.0.1:48923` that wraps yt-dlp's
+  YouTube fallback ladder and trims with ffmpeg.
+- `extension/` - Manifest V3 extension. The content script injects the button; the background
   worker proxies requests to the server.
 
-## Install
+## Requirements
 
-1. `./server/install.sh` (needs yt-dlp, ffmpeg, node on PATH). Installs a launchd agent
-   `com.beau.yt-clip` so the server is always running. Log: `~/Library/Logs/yt-clip.log`.
-2. Chrome > `chrome://extensions` > enable Developer mode > Load unpacked > pick `extension/`.
-3. Open any YouTube video. The button is centered directly under the player.
+- macOS (the always-on server uses launchd; Linux works too, see below)
+- Homebrew
+- Google Chrome, signed in to YouTube (yt-dlp borrows Chrome's cookies when YouTube blocks
+  anonymous downloads, which is most of the time now)
 
-## Notes
+## Install (macOS, about 2 minutes)
 
-- Clips are re-encoded (libx264 crf 18 / mp3 V0) so cuts are frame-accurate, not keyframe-snapped.
-- Full downloads are cached in `~/.cache/yt-clip` for 6 hours so several clips from one video
-  only download once.
-- YouTube sometimes 403s the plain download; the server walks the same ladder as extract.sh,
-  ending with `--cookies-from-browser chrome`. Set `COOKIE_BROWSER` in the plist to change browsers.
-- Uninstall the server with `./server/uninstall.sh`.
+```bash
+git clone <this repo> ~/yt-clip
+cd ~/yt-clip
+./setup.sh
+```
+
+`setup.sh` installs yt-dlp, ffmpeg and node with Homebrew if missing, installs the server as
+a launchd agent (`com.beau.yt-clip`, starts at login, restarts if it dies), then prints the Chrome
+steps:
+
+1. Open `chrome://extensions`
+2. Turn on Developer mode
+3. Load unpacked, pick the `extension/` folder
+4. Open a YouTube video
+
+The first download that needs cookies triggers a macOS Keychain prompt for "Chrome Safe Storage".
+Click Always Allow.
+
+## Using it
+
+- Full: Audio (mp3) or Video (mp4) of the whole video.
+- Clip: type start and end as `m:ss` or `h:mm:ss`, or hit "now" to grab the current playback
+  time, then Audio or Video.
+- The card shows the step, percent, speed and a countdown. Steps 1 to 4 are yt-dlp strategies,
+  cheapest first; the server remembers which one worked and starts there next time.
+
+## Good to know
+
+- YouTube refuses partial downloads, so clipping still downloads the whole file first. Long
+  videos take longer even for a short clip. Full downloads are cached for 6 hours in
+  `~/.cache/yt-clip`, so several clips from one video only download once.
+- Clips are re-encoded (libx264 crf 18 / mp3 V0) so cuts are frame-accurate.
+- Only the extension can talk to the server: it refuses requests from web pages and unexpected
+  Host headers.
+- Logs: `~/Library/Logs/yt-clip.log`. Health check: `curl localhost:48923/health`.
+- Different browser for cookies: set `COOKIE_BROWSER` (chrome, brave, edge, firefox, safari) in
+  the `EnvironmentVariables` of `~/Library/LaunchAgents/com.beau.yt-clip.plist` and re-run
+  `server/install.sh`.
+- After reloading the extension in `chrome://extensions`, refresh any open YouTube tabs.
+- Uninstall: `./server/uninstall.sh`, then remove the extension in Chrome.
+
+## Linux
+
+Install `yt-dlp ffmpeg nodejs` with your package manager, run `node server/server.mjs` under a
+systemd user unit (or any supervisor), and load the extension the same way. Replace the
+`open -R` Finder reveal in `server.mjs` with `xdg-open` or drop it.
+
+## Updating yt-dlp
+
+YouTube changes often. If downloads start failing at every step, `brew upgrade yt-dlp` fixes it
+nine times out of ten.
+
+## Respect
+
+For personal reference, editing and analysis. Respect the source's licensing on redistribution.

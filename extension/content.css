@@ -19,7 +19,8 @@ html[dark] #ytclip-root { --c-text: #f1f1f1; --c-sub: #aaaaaa; --c-btn: rgba(255
 #ytclip-root .ytclip-head { display: flex; align-items: center; gap: 10px; }
 #ytclip-root .ytclip-title { flex: 1; font-size: 15px; font-weight: 500; color: var(--c-text); }
 #ytclip-root .ytclip-eta { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--c-sub); }
-#ytclip-root .ytclip-sub { font-size: 12.5px; color: var(--c-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.2em; }
+#ytclip-root .ytclip-sub { font-size: 12.5px; color: var(--c-sub); line-height: 1.35; min-height: 1.2em; }
+#ytclip-root .ytclip-hint { font-size: 12px; line-height: 1.35; color: var(--c-sub); opacity: .85; padding-top: 4px; border-top: 1px solid var(--c-line); margin-top: 2px; }
 #ytclip-root .ytclip-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--c-line); border-top-color: #ff4e45; animation: ytclip-rot .8s linear infinite; flex: none; }
 #ytclip-root .ytclip-status.ok .ytclip-spin { border: 0; background: #2ba640; animation: none; -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M2.5 8.5l3.5 3.5 7.5-8' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/16px no-repeat; }
 #ytclip-root .ytclip-status.err .ytclip-spin { border: 0; background: #ff4e45; animation: none; -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 4l8 8M12 4l-8 8' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'/></svg>") center/16px no-repeat; }

@@ -43,7 +43,8 @@
             el('span', { class: 'ytclip-title', text: '' }),
             el('span', { class: 'ytclip-eta', text: '' })]),
           el('div', { class: 'ytclip-bar' }, [el('div', { class: 'ytclip-fill' })]),
-          el('div', { class: 'ytclip-sub', text: '' })])]));
+          el('div', { class: 'ytclip-sub', text: '' }),
+          el('div', { class: 'ytclip-hint', hidden: true })])]));
     const panel = root.querySelector('.ytclip-panel');
     const status = root.querySelector('.ytclip-status');
     const start = root.querySelector('[data-t=start]');
@@ -59,6 +60,7 @@
       status.hidden = false; status.className = 'ytclip-status ' + kind;
       $('ytclip-title').textContent = o.title || '';
       $('ytclip-sub').textContent = o.sub || '';
+      $('ytclip-hint').textContent = o.hint || ''; $('ytclip-hint').hidden = !o.hint;
       const fill = $('ytclip-fill');
       fill.style.width = (o.pct != null ? Math.max(2, o.pct) : 100) + '%';
       fill.classList.toggle('indet', o.pct == null && kind === 'busy');
@@ -97,8 +99,8 @@
         const bits = [d.step];
         if (d.phase === 'downloading' && d.progress > 0) bits.push(`${d.progress.toFixed(0)}%` + (d.size ? ` of ${d.size}` : '') + (d.speed ? ` at ${d.speed}` : ''));
         if (d.phase === 'encoding' && d.progress > 0) bits.push(`${d.progress.toFixed(0)}%` + (d.speed ? ` (${d.speed} realtime)` : ''));
-        if (d.phase === 'downloading' && !(d.progress > 0)) bits.push('waiting for YouTube to hand over the stream');
-        show('busy', { title: label, sub: bits.filter(Boolean).join(' · '), pct: d.progress > 0 ? d.progress : null, eta: d.eta, resetEta: !(d.progress > 0) });
+        if (d.phase === 'downloading' && !(d.progress > 0) && d.note) bits.push(d.note);
+        show('busy', { title: label, sub: bits.filter(Boolean).join(' · '), hint: d.hint, pct: d.progress > 0 ? d.progress : null, eta: d.eta, resetEta: !(d.progress > 0) });
         setTimeout(poll, 700);
       };
       poll();
