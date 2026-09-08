@@ -3,7 +3,7 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 NODE="$(command -v node)"
-LABEL=com.beau.yt-clip
+LABEL=com.ytclip.server
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/yt-clip.log"
 for t in yt-dlp ffmpeg node; do command -v $t >/dev/null || { echo "missing: $t"; exit 1; }; done

@@ -18,16 +18,21 @@ Chrome extensions cannot run yt-dlp, so there are two parts:
 - Google Chrome, signed in to YouTube (yt-dlp borrows Chrome's cookies when YouTube blocks
   anonymous downloads, which is most of the time now)
 
-## Install (macOS, about 2 minutes)
+## Install with an AI agent (easiest)
+
+Paste the prompt in [AGENT_SETUP.md](AGENT_SETUP.md) into Claude Code, Codex, Cursor or any
+coding agent. It installs and verifies everything; you do the two Chrome clicks at the end.
+
+## Install by hand (macOS, about 2 minutes)
 
 ```bash
-git clone <this repo> ~/yt-clip
+git clone https://github.com/beausterling/yt-clip ~/yt-clip
 cd ~/yt-clip
 ./setup.sh
 ```
 
 `setup.sh` installs yt-dlp, ffmpeg and node with Homebrew if missing, installs the server as
-a launchd agent (`com.beau.yt-clip`, starts at login, restarts if it dies), then prints the Chrome
+a launchd agent (`com.ytclip.server`, starts at login, restarts if it dies), then prints the Chrome
 steps:
 
 1. Open `chrome://extensions`
@@ -56,7 +61,7 @@ Click Always Allow.
   Host headers.
 - Logs: `~/Library/Logs/yt-clip.log`. Health check: `curl localhost:48923/health`.
 - Different browser for cookies: set `COOKIE_BROWSER` (chrome, brave, edge, firefox, safari) in
-  the `EnvironmentVariables` of `~/Library/LaunchAgents/com.beau.yt-clip.plist` and re-run
+  the `EnvironmentVariables` of `~/Library/LaunchAgents/com.ytclip.server.plist` and re-run
   `server/install.sh`.
 - After reloading the extension in `chrome://extensions`, refresh any open YouTube tabs.
 - Uninstall: `./server/uninstall.sh`, then remove the extension in Chrome.
@@ -72,6 +77,6 @@ systemd user unit (or any supervisor), and load the extension the same way. Repl
 YouTube changes often. If downloads start failing at every step, `brew upgrade yt-dlp` fixes it
 nine times out of ten.
 
-## Respect
+## License
 
-For personal reference, editing and analysis. Respect the source's licensing on redistribution.
+MIT. For personal reference, editing and analysis. Respect the source's licensing on redistribution.
