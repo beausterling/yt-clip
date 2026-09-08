@@ -2,7 +2,16 @@
 // full audio/video or a clip between two timestamps via the local server.
 (() => {
   const ROOT_ID = 'ytclip-root';
-  const api = (path, method, body) => new Promise(res => chrome.runtime.sendMessage({ path, method, body }, res));
+  // After the extension is reloaded, old tabs keep this script but lose the messaging channel
+  // (chrome.runtime.id becomes undefined). Fail fast instead of hanging on "Starting...".
+  const alive = () => { try { return !!chrome.runtime?.id; } catch { return false; } };
+  const STALE = 'YT Clip was updated. Refresh this page to keep using it.';
+  const api = (path, method, body) => new Promise(res => {
+    if (!alive()) return res({ ok: false, status: 0, data: { error: STALE } });
+    try {
+      chrome.runtime.sendMessage({ path, method, body }, r => res(r || { ok: false, status: 0, data: { error: chrome.runtime.lastError?.message || STALE } }));
+    } catch { res({ ok: false, status: 0, data: { error: STALE } }); }
+  });
   const video = () => document.querySelector('video.html5-main-video');
   const fmt = s => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
     return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
@@ -121,6 +130,6 @@
   // YouTube mutates the DOM constantly, so a debounced MutationObserver never settles.
   // A cheap 1s poll (one querySelector) plus the SPA navigation event is reliable.
   document.addEventListener('yt-navigate-finish', () => { document.getElementById(ROOT_ID)?.remove(); mount(); });
-  setInterval(mount, 1000);
+  const loop = setInterval(() => { if (!alive()) { clearInterval(loop); return; } mount(); }, 1000);
   mount();
 })();
