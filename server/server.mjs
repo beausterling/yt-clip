@@ -107,15 +107,22 @@ async function runJob(job, { url, kind, start, end }) {
   }
 }
 
-const cors = res => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+// Only the extension (chrome-extension:// origin) or non-browser local tools (no Origin header)
+// may call this. Any web page's Origin is refused, so sites can't drive downloads via CORS.
+const originOk = req => !req.headers.origin || /^chrome-extension:\/\//.test(req.headers.origin);
+const hostOk = req => req.headers.host === `127.0.0.1:${PORT}` || req.headers.host === `localhost:${PORT}`;
+const cors = (req, res) => {
+  if (req.headers.origin) res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+  res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Headers', 'content-type');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
 };
-const json = (res, code, body) => { cors(res); res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
 
 http.createServer((req, res) => {
-  if (req.method === 'OPTIONS') { cors(res); res.writeHead(204); return res.end(); }
+  if (!originOk(req) || !hostOk(req)) return json(res, 403, { error: 'forbidden origin' });
+  cors(req, res);
+  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const u = new URL(req.url, 'http://x');
   if (req.method === 'GET' && u.pathname === '/health') return json(res, 200, { ok: true, out: OUT_DIR });
   if (req.method === 'GET' && u.pathname.startsWith('/jobs/')) {
