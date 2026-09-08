@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "YT Clip",
+  "version": "1.0.0",
+  "description": "Download the full audio or video of the YouTube video you are watching, or clip a section between two timestamps.",
+  "permissions": [],
+  "host_permissions": ["http://127.0.0.1:48923/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{
+    "matches": ["https://www.youtube.com/*"],
+    "js": ["content.js"],
+    "css": ["content.css"],
+    "run_at": "document_idle"
+  }],
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" }
+}
