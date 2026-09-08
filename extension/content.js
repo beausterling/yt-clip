@@ -37,6 +37,12 @@
           el('span', { class: 'ytclip-label', text: 'Clip' }), tin('start', '0:00'), btn('set-start', 'now', 'Use current time'),
           el('span', { class: 'ytclip-dash', text: 'to' }), tin('end', '0:30'), btn('set-end', 'now', 'Use current time'),
           btn('clip-audio', 'Audio'), btn('clip-video', 'Video')]),
+        el('div', { class: 'ytclip-row ytclip-opts' }, [
+          el('span', { class: 'ytclip-label', text: 'Video' }),
+          (() => { const sel = el('select', { class: 'ytclip-q' });
+            [['720', '720p, fast'], ['1080', '1080p'], ['best', 'Best available, up to 4K (VP9/AV1)']].forEach(([v, t]) => sel.appendChild(el('option', { value: v, text: t })));
+            return sel; })(),
+          el('span', { class: 'ytclip-dash', text: 'Audio is always the best stream, saved as 320k mp3' })]),
         el('div', { class: 'ytclip-status', hidden: true }, [
           el('div', { class: 'ytclip-head' }, [
             el('span', { class: 'ytclip-spin' }),
@@ -49,6 +55,9 @@
     const status = root.querySelector('.ytclip-status');
     const start = root.querySelector('[data-t=start]');
     const end = root.querySelector('[data-t=end]');
+    const qsel = root.querySelector('.ytclip-q');
+    try { qsel.value = localStorage.getItem('ytclip-q') || '720'; } catch {}
+    qsel.addEventListener('change', () => { try { localStorage.setItem('ytclip-q', qsel.value); } catch {} });
     const buttons = [...root.querySelectorAll('[data-act^="full"],[data-act^="clip"]')];
     const busy = b => buttons.forEach(x => x.disabled = b);
     const $ = c => status.querySelector('.' + c);
@@ -79,6 +88,7 @@
 
     async function submit(kind, clip) {
       const body = { url: pageUrl(), kind };
+      if (kind === 'video') body.quality = qsel.value;
       if (clip) {
         const s = parse(start.value), e = parse(end.value);
         if (isNaN(s) || isNaN(e)) return say('Use m:ss or h:mm:ss timestamps.', 'err');

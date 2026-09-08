@@ -62,39 +62,58 @@ function cleanCache() {
   for (const f of readdirSync(CACHE)) { const p = join(CACHE, f); try { if (now - statSync(p).mtimeMs > CACHE_TTL_MS) rmSync(p, { force: true }); } catch {} }
 }
 
-function findCached(id, kind) {
-  const want = kind === 'audio' ? /^a_/ : /^v_/;
-  return readdirSync(CACHE).filter(f => want.test(f) && f.includes(id) && !f.endsWith('.part') && !f.endsWith('.ytdl')).map(f => join(CACHE, f))[0];
+const cachePrefix = (id, kind, quality) => (kind === 'audio' ? 'a' : 'v' + (quality || '720')) + '_' + id;
+function findCached(id, kind, quality) {
+  const prefix = cachePrefix(id, kind, quality) + '.';
+  return readdirSync(CACHE).filter(f => f.startsWith(prefix) && !f.endsWith('.part') && !f.endsWith('.ytdl') && !/\.f\d+\./.test(f)).map(f => join(CACHE, f))[0];
 }
 
 // The ladder from audio-extract/extract.sh, cheapest first. Cookies unlock YouTube's JS challenge.
 // Each rung has a human label and a "what is happening while nothing moves" note for the UI.
-function ladder(kind) {
-  const ck = ['--cookies-from-browser', COOKIE_BROWSER, '--extractor-args', 'youtube:player_client=web'];
+// Verified 2026-09: the mweb player client + browser cookies is the one that exposes the full
+// format list (opus/AAC audio-only, 1080p/1440p/2160p video) AND lets them download. The plain
+// web client lists nothing and audio-only streams 403. So mweb+cookies goes first.
+const QUALITIES = { '720': 720, '1080': 1080, 'best': 0 };
+function ladder(kind, quality) {
   const browser = COOKIE_BROWSER[0].toUpperCase() + COOKIE_BROWSER.slice(1);
-  if (kind === 'audio') return [
-    { label: 'direct audio stream', note: 'asking YouTube for the plain audio track', args: ['-f', 'bestaudio'] },
-    { label: 'Safari/TV player fallback', note: 'retrying through the Safari and TV player clients', args: ['-f', 'bestaudio', '--extractor-args', 'youtube:player_client=web_safari,tv'] },
-    { label: `${browser} cookies`, note: `signing in with your ${browser} cookies and solving YouTube's JS challenge (this can take a while)`, args: ['-f', 'bestaudio', ...ck] },
-    { label: 'combined stream, last resort', note: 'pulling the combined audio+video file and stripping the video afterwards', args: ['-f', 'best', ...ck] },
-  ];
-  const fmt = ['-f', 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b', '--merge-output-format', 'mp4'];
+  const ck = c => ['--cookies-from-browser', COOKIE_BROWSER, '--extractor-args', `youtube:player_client=${c}`];
+  const cookieNote = `signing in with your ${browser} cookies and solving YouTube's JS challenge`;
+  if (kind === 'audio') {
+    // Stereo first: the 384k AAC tracks YouTube offers are 5.1 surround, which a stereo mp3 would only downmix.
+    const A = 'bestaudio[audio_channels<=2]/bestaudio';
+    return [
+      { label: 'best audio stream (mobile web client)', note: cookieNote, args: ['-f', A, ...ck('mweb')] },
+      { label: 'best audio stream (web client)', note: cookieNote, args: ['-f', A, ...ck('web')] },
+      { label: 'Safari/TV player fallback', note: 'retrying through the Safari and TV player clients without cookies', args: ['-f', A, '--extractor-args', 'youtube:player_client=web_safari,tv'] },
+      { label: 'combined stream, last resort', note: 'pulling the combined audio+video file and stripping the video (lower audio quality)', args: ['-f', 'best', ...ck('web')] },
+    ];
+  }
+  const h = QUALITIES[quality] ?? 720;
+  const cap = h ? `[height<=${h}]` : '';
+  // 720p/1080p: h264 first so the file plays anywhere (QuickTime included). YouTube's h264 stops
+  // at 1080p, so "best" ranks by resolution instead and accepts vp9/av1 to reach 1440p/2160p.
+  const V = h
+    ? `bv*${cap}[vcodec^=avc1]+ba[ext=m4a][audio_channels<=2]/bv*${cap}[vcodec^=avc1]+ba/bv*${cap}+ba[audio_channels<=2]/bv*${cap}+ba/b${cap}/b`
+    : `bv*+ba[ext=m4a][audio_channels<=2]/bv*+ba[audio_channels<=2]/bv*+ba/b`;
+  const merge = ['--merge-output-format', 'mp4'];
   return [
-    { label: 'direct video stream', note: 'asking YouTube for the best video and audio tracks', args: fmt },
-    { label: `${browser} cookies`, note: `signing in with your ${browser} cookies and solving YouTube's JS challenge (this can take a while)`, args: [...fmt, ...ck] },
-    { label: 'combined stream, last resort', note: 'pulling the single combined file YouTube still serves', args: ['-f', 'best', '--merge-output-format', 'mp4', ...ck] },
+    { label: `${h ? h + 'p' : 'best'} video (mobile web client)`, note: cookieNote, args: ['-f', V, ...merge, ...ck('mweb')] },
+    { label: `${h ? h + 'p' : 'best'} video (web client)`, note: cookieNote, args: ['-f', V, ...merge, ...ck('web')] },
+    { label: 'direct video stream, no cookies', note: 'asking YouTube for the video anonymously', args: ['-f', V, ...merge] },
+    { label: 'combined stream, last resort', note: 'pulling the single combined file YouTube still serves (usually 360p or 720p)', args: ['-f', `b${cap}/b`, ...merge, ...ck('web')] },
   ];
 }
 
 // Remember which rung worked last time and try it first; failed rungs each cost real seconds.
-const preferred = { audio: 0, video: 0 };
+const preferred = {};
 
-async function fetchSource(job, url, id, kind) {
-  const cached = findCached(id, kind);
+async function fetchSource(job, url, id, kind, quality) {
+  const cached = findCached(id, kind, quality);
   if (cached) { job.step = 'using cached download'; job.progress = 100; return cached; }
-  const prefix = (kind === 'audio' ? 'a_' : 'v_') + id;
-  const rungs = ladder(kind);
-  const order = [preferred[kind], ...rungs.map((_, i) => i).filter(i => i !== preferred[kind])];
+  const prefix = cachePrefix(id, kind, quality);
+  const rungs = ladder(kind, quality);
+  const pk = kind + ':' + (quality || ''), pref = preferred[pk] || 0;
+  const order = [pref, ...rungs.map((_, i) => i).filter(i => i !== pref)];
   let n = 0;
   for (const i of order) {
     const { label, note, args } = rungs[i];
@@ -104,15 +123,15 @@ async function fetchSource(job, url, id, kind) {
     job.note = note;
     job.progress = 0; job.eta = null; job.speed = null; job.size = null;
     const r = await run('yt-dlp', ['--no-playlist', '--newline', ...args, '-o', join(CACHE, prefix + '.%(ext)s'), url], job);
-    const got = findCached(id, kind);
-    if (r.code === 0 && got) { preferred[kind] = i; return got; }
+    const got = findCached(id, kind, quality);
+    if (r.code === 0 && got) { preferred[pk] = i; return got; }
     job.log.push(`step ${n} failed: yt-dlp ${args.join(' ')}\n${r.err.slice(-400)}`);
     for (const f of readdirSync(CACHE)) if (f.startsWith(prefix) && (f.endsWith('.part') || f.endsWith('.ytdl'))) rmSync(join(CACHE, f), { force: true });
   }
   throw new Error('all yt-dlp strategies failed. Try: yt-dlp --list-formats <url>');
 }
 
-async function runJob(job, { url, kind, start, end }) {
+async function runJob(job, { url, kind, start, end, quality }) {
   try {
     cleanCache();
     job.phase = 'info'; job.phaseStart = Date.now(); job.step = 'reading video info';
@@ -123,7 +142,7 @@ async function runJob(job, { url, kind, start, end }) {
     const clipReq = start != null && end != null;
     if (clipReq && srcDur > 15 * 60) job.hint = `Heads up: this video is ${Math.round(srcDur / 60)} min long. YouTube refuses partial downloads, so the whole file comes down first. Long videos take longer even when you only clip a small portion.`;
     else if (srcDur > 30 * 60) job.hint = `Heads up: this video is ${Math.round(srcDur / 60)} min long, so this will take a bit.`;
-    const src = await fetchSource(job, url, id, kind);
+    const src = await fetchSource(job, url, id, kind, quality);
     const clip = start != null && end != null;
     const base = safe(title || id) + (clip ? ` [${stamp(toSec(start))}-${stamp(toSec(end))}]` : '');
     const ext = kind === 'audio' ? 'mp3' : 'mp4';
@@ -136,7 +155,7 @@ async function runJob(job, { url, kind, start, end }) {
     // -ss before -i = fast seek; re-encode gives an exact, keyframe-independent cut.
     const seek = clip ? ['-ss', String(toSec(start)), '-t', String(toSec(end) - toSec(start))] : [];
     const enc = kind === 'audio'
-      ? ['-vn', '-c:a', 'libmp3lame', '-q:a', '0']
+      ? ['-vn', '-ac', '2', '-c:a', 'libmp3lame', '-b:a', '320k']
       : clip ? ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart']
              : ['-c', 'copy', '-movflags', '+faststart'];
     const r = await run('ffmpeg', ['-y', '-v', 'error', '-nostats', '-progress', 'pipe:1', ...seek, '-i', src, ...enc, out], job, (d, j) => parseFfmpeg(d, j, expect));
@@ -177,6 +196,7 @@ http.createServer((req, res) => {
       if (!/^https?:\/\//.test(b.url || '')) return json(res, 400, { error: 'bad url' });
       if (!['audio', 'video'].includes(b.kind)) return json(res, 400, { error: 'kind must be audio|video' });
       if ((b.start != null) !== (b.end != null)) return json(res, 400, { error: 'start and end go together' });
+      if (b.quality != null && !(b.quality in QUALITIES)) return json(res, 400, { error: 'quality must be 720|1080|best' });
       if (b.start != null && !(toSec(b.end) > toSec(b.start))) return json(res, 400, { error: 'end must be after start' });
       const id = randomUUID();
       const job = { id, status: 'running', phase: 'info', step: 'queued', note: null, hint: null, progress: 0, eta: null, speed: null, size: null, phaseStart: Date.now(), updatedAt: Date.now(), log: [], file: null, error: null };

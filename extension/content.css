@@ -33,3 +33,6 @@ html[dark] #ytclip-root { --c-text: #f1f1f1; --c-sub: #aaaaaa; --c-btn: rgba(255
 #ytclip-root .ytclip-fill.indet { width: 35% !important; transition: none; animation: ytclip-slide 1.4s ease-in-out infinite; }
 @keyframes ytclip-rot { to { transform: rotate(360deg); } }
 @keyframes ytclip-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+#ytclip-root .ytclip-opts { padding-top: 4px; }
+#ytclip-root .ytclip-q { font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--c-line); background: var(--c-btn); color: var(--c-text); cursor: pointer; }
+#ytclip-root .ytclip-q option { background: #212121; color: #f1f1f1; }

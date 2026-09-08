@@ -48,6 +48,11 @@ Click Always Allow.
 - Full: Audio (mp3) or Video (mp4) of the whole video.
 - Clip: type start and end as `m:ss` or `h:mm:ss`, or hit "now" to grab the current playback
   time, then Audio or Video.
+- Video quality: pick 720p (fast, default), 1080p, or Best available up to 4K. 720p and 1080p
+  are h264 and play anywhere. "Best" takes VP9/AV1 from YouTube for 1440p/2160p; full downloads
+  keep that codec (plays in Chrome, VLC, IINA; QuickTime on older Macs may not), while clips are
+  always re-encoded to h264 so they play everywhere. Your choice is remembered.
+- Audio is always the best stereo stream YouTube serves (usually 128k Opus), saved as 320k mp3.
 - The card shows the step, percent, speed and a countdown. Steps 1 to 4 are yt-dlp strategies,
   cheapest first; the server remembers which one worked and starts there next time.
 
