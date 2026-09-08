@@ -40,7 +40,7 @@
         el('div', { class: 'ytclip-row ytclip-opts' }, [
           el('span', { class: 'ytclip-label', text: 'Video' }),
           (() => { const sel = el('select', { class: 'ytclip-q' });
-            [['720', '720p, fast'], ['1080', '1080p'], ['best', 'Best available, up to 4K (VP9/AV1)']].forEach(([v, t]) => sel.appendChild(el('option', { value: v, text: t })));
+            [['720', '720p, fast'], ['1080', '1080p'], ['best', 'Best available, up to 4K']].forEach(([v, t]) => sel.appendChild(el('option', { value: v, text: t })));
             return sel; })(),
           el('span', { class: 'ytclip-dash', text: 'Audio is always the best stream, saved as 320k mp3' })]),
         el('div', { class: 'ytclip-status', hidden: true }, [
