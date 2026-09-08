@@ -28,14 +28,36 @@
           el('span', { class: 'ytclip-label', text: 'Clip' }), tin('start', '0:00'), btn('set-start', 'now', 'Use current time'),
           el('span', { class: 'ytclip-dash', text: 'to' }), tin('end', '0:30'), btn('set-end', 'now', 'Use current time'),
           btn('clip-audio', 'Audio'), btn('clip-video', 'Video')]),
-        el('div', { class: 'ytclip-status', hidden: true })]));
+        el('div', { class: 'ytclip-status', hidden: true }, [
+          el('div', { class: 'ytclip-head' }, [
+            el('span', { class: 'ytclip-spin' }),
+            el('span', { class: 'ytclip-title', text: '' }),
+            el('span', { class: 'ytclip-eta', text: '' })]),
+          el('div', { class: 'ytclip-bar' }, [el('div', { class: 'ytclip-fill' })]),
+          el('div', { class: 'ytclip-sub', text: '' })])]));
     const panel = root.querySelector('.ytclip-panel');
     const status = root.querySelector('.ytclip-status');
     const start = root.querySelector('[data-t=start]');
     const end = root.querySelector('[data-t=end]');
     const buttons = [...root.querySelectorAll('[data-act^="full"],[data-act^="clip"]')];
     const busy = b => buttons.forEach(x => x.disabled = b);
-    const say = (msg, cls = '') => { status.hidden = false; status.textContent = msg; status.className = 'ytclip-status ' + cls; };
+    const $ = c => status.querySelector('.' + c);
+    const fmtEta = n => n == null ? '' : n < 60 ? `${Math.round(n)}s left` : `${Math.floor(n / 60)}:${String(Math.round(n % 60)).padStart(2, '0')} left`;
+    let timer = null, eta = null, etaAt = 0;
+    // Countdown ticks locally every second between server polls.
+    const tick = () => { $('ytclip-eta').textContent = eta == null ? '' : fmtEta(Math.max(0, eta - (Date.now() - etaAt) / 1000)); };
+    const show = (kind, o) => {
+      status.hidden = false; status.className = 'ytclip-status ' + kind;
+      $('ytclip-title').textContent = o.title || '';
+      $('ytclip-sub').textContent = o.sub || '';
+      const fill = $('ytclip-fill');
+      fill.style.width = (o.pct != null ? Math.max(2, o.pct) : 100) + '%';
+      fill.classList.toggle('indet', o.pct == null && kind === 'busy');
+      if (o.eta != null) { eta = o.eta; etaAt = Date.now(); } else if (kind !== 'busy' || o.resetEta) eta = null;
+      tick();
+      clearInterval(timer); if (kind === 'busy' && eta != null) timer = setInterval(tick, 1000);
+    };
+    const say = (msg, cls = '') => show(cls === 'err' ? 'err' : cls === 'ok' ? 'ok' : 'busy', { title: msg, pct: cls ? 100 : null });
 
     root.querySelector('.ytclip-main').onclick = () => {
       panel.hidden = !panel.hidden;
@@ -60,9 +82,14 @@
         const j = await api(`/jobs/${id}`);
         if (!j.ok) { busy(false); return say(j.data.error || 'Lost the job.', 'err'); }
         const d = j.data;
-        if (d.status === 'done') { busy(false); return say('Saved to Downloads: ' + d.file.split('/').pop(), 'ok'); }
-        if (d.status === 'error') { busy(false); return say(d.error, 'err'); }
-        say(d.step + (d.progress ? ` ${d.progress.toFixed(0)}%` : '') + '...');
+        if (d.status === 'done') { busy(false); return show('ok', { title: 'Saved to Downloads', sub: d.file.split('/').pop(), pct: 100 }); }
+        if (d.status === 'error') { busy(false); return show('err', { title: 'Failed', sub: d.error, pct: 100 }); }
+        const label = { info: 'Preparing...', downloading: 'Downloading...', encoding: clip ? 'Trimming...' : 'Encoding...' }[d.phase] || 'Working...';
+        const bits = [d.step];
+        if (d.phase === 'downloading' && d.progress > 0) bits.push(`${d.progress.toFixed(0)}%` + (d.size ? ` of ${d.size}` : '') + (d.speed ? ` at ${d.speed}` : ''));
+        if (d.phase === 'encoding' && d.progress > 0) bits.push(`${d.progress.toFixed(0)}%` + (d.speed ? ` (${d.speed} realtime)` : ''));
+        if (d.phase === 'downloading' && !(d.progress > 0)) bits.push('waiting for YouTube to hand over the stream');
+        show('busy', { title: label, sub: bits.filter(Boolean).join(' · '), pct: d.progress > 0 ? d.progress : null, eta: d.eta, resetEta: !(d.progress > 0) });
         setTimeout(poll, 700);
       };
       poll();
