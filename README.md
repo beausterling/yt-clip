@@ -87,8 +87,9 @@ nine times out of ten.
 ## Support
 
 YT Clip is free and open source. If it saves you time, you can
-[buy me a coffee](https://buymeacoffee.com/beausterling). It keeps the yt-dlp fixes coming
-every time YouTube changes something.
+[buy me a coffee](https://buymeacoffee.com/beausterling) or grab it as a pay-what-you-want
+download on [Gumroad](https://beausterling.gumroad.com/l/ytclip). It keeps the yt-dlp fixes
+coming every time YouTube changes something.
 
 ## License
 
